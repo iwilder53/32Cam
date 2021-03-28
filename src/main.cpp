@@ -21,7 +21,7 @@ String serverName = "166.62.91.152";
 String serverPath = "/logger_cam/upload.php";     
 const int serverPort = 80;
 
-String sendPhoto(camera_fb_t * fb);
+String sendPhoto();
 WiFiClient client;
 // Pin definition for CAMERA_MODEL_AI_THINKER
 #define PWDN_GPIO_NUM     32
@@ -48,6 +48,21 @@ void setup() {
   Serial.begin(115200);
  
   Serial.setDebugOutput(true);
+ 
+  WiFi.mode(WIFI_STA);
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);  
+  delay(500);
+  
+  while( (WiFi.status() != WL_CONNECTED)) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println();
+  Serial.print("ESP32-CAM IP Address: ");
+  Serial.println(WiFi.localIP());
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -75,61 +90,50 @@ void setup() {
  
   if(psramFound()){
     config.frame_size = FRAMESIZE_UXGA; // FRAMESIZE_ + QVGA|CIF|VGA|SVGA|XGA|SXGA|UXGA
-    config.jpeg_quality = 10;
+    config.jpeg_quality = 8;
     config.fb_count = 2;
   } else {
     config.frame_size = FRAMESIZE_SVGA;
-    config.jpeg_quality = 10;
+    config.jpeg_quality = 12;
     config.fb_count = 1;
   }
  
   // Init Camera
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
-    Serial.printf("Camera init failed with error 0x%x", err); ESP.restart();
+    Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
- pinMode(4, OUTPUT);
+ 
+  delay(1000);
+  
+  sendPhoto(); 
+} 
+ 
+void loop() {
+ 
+}
+String sendPhoto() {
+  String getAll;
+  String getBody;
+pinMode(4, OUTPUT);
   digitalWrite(4, HIGH);
   rtc_gpio_hold_dis(GPIO_NUM_4);
   camera_fb_t * fb = NULL;
   fb = esp_camera_fb_get();
   if(!fb) {
     Serial.println("Camera capture failed");
+    delay(1000);
     ESP.restart();
   }
    pinMode(4, OUTPUT);
   digitalWrite(4, LOW);
-  WiFi.mode(WIFI_STA);
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);  
-  
-  while( (WiFi.status() != WL_CONNECTED)) {
-    Serial.print(".");
-    delay(500);
-  }
-  Serial.println();
-  Serial.print("ESP32-CAM IP Address: ");
-  Serial.println(WiFi.localIP());
   Serial.println("Connecting to server: " + serverName);
-  
-  sendPhoto(fb); 
-} 
- 
-void loop() {
- 
-}
-String sendPhoto(camera_fb_t  * fb) {
-  String getAll;
-  String getBody;
-
 
   if (client.connect(serverName.c_str(), serverPort)) {
     Serial.println("Connection successful!");    
-    String head = "--SpyederEYE-CAM\r\nContent-Disposition: form-data; name=\"imageFile\"; filename=\"spyderEYE-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
-    String tail = "\r\n--SpyederEYE-CAM--\r\n";
+    String head = "--SpyderEye-Cam\r\nContent-Disposition: form-data; name=\"imageFile\"; filename=\"spyderEYE-test-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
+    String tail = "\r\n--SpyderEye-Cam--\r\n";
 
     uint32_t imageLen = fb->len;
     uint32_t extraLen = head.length() + tail.length();
@@ -138,7 +142,7 @@ String sendPhoto(camera_fb_t  * fb) {
     client.println("POST " + serverPath + " HTTP/1.1");
     client.println("Host: " + serverName);
     client.println("Content-Length: " + String(totalLen));
-    client.println("Content-Type: multipart/form-data; boundary=SpyederEYE-CAM");
+    client.println("Content-Type: multipart/form-data; boundary=SpyderEye-Cam");
     client.println();
     Serial.println("request sent");
     client.print(head);
@@ -185,8 +189,9 @@ String sendPhoto(camera_fb_t  * fb) {
   else {
     getBody = "Connection to " + serverName +  " failed.";
     Serial.println(getBody);
-    Serial.println("Starting SD Card");
+  Serial.println("Starting SD Card");
  
+  delay(500);
   if(!SD_MMC.begin()){
     Serial.println("SD Card Mount Failed"); 
     //return;
@@ -197,7 +202,13 @@ String sendPhoto(camera_fb_t  * fb) {
     Serial.println("No SD Card attached");
   }
    
-
+  camera_fb_t * fb = NULL;
+ 
+  // Take Picture with Camera
+  fb = esp_camera_fb_get();  
+  if(!fb) {
+    Serial.println("Camera capture failed");
+  }
   // initialize EEPROM with predefined size
   EEPROM.begin(EEPROM_SIZE);
   pictureNumber = EEPROM.read(0) + 1;
@@ -227,7 +238,7 @@ String sendPhoto(camera_fb_t  * fb) {
   rtc_gpio_hold_en(GPIO_NUM_4);
 
   Serial.println("Going to sleep now");
-  delay(1000);
+  delay(10000);
   pinMode(13,INPUT);
 
   if (digitalRead(13) == LOW)
